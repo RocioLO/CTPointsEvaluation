@@ -3,6 +3,8 @@ import unittest
 import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 import logging
+import numpy as np
+
 
 #
 # SacroNavEvaluation
@@ -52,68 +54,18 @@ class SacroNavEvaluationWidget(ScriptedLoadableModuleWidget):
     # Layout within the dummy collapsible button
     parametersFormLayout = qt.QFormLayout(parametersCollapsibleButton)
 
-    #
-    # input volume selector
-    #
-    self.inputSelector = slicer.qMRMLNodeComboBox()
-    self.inputSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
-    self.inputSelector.selectNodeUponCreation = True
-    self.inputSelector.addEnabled = False
-    self.inputSelector.removeEnabled = False
-    self.inputSelector.noneEnabled = False
-    self.inputSelector.showHidden = False
-    self.inputSelector.showChildNodeTypes = False
-    self.inputSelector.setMRMLScene( slicer.mrmlScene )
-    self.inputSelector.setToolTip( "Pick the input to the algorithm." )
-    parametersFormLayout.addRow("Input Volume: ", self.inputSelector)
 
-    #
-    # output volume selector
-    #
-    self.outputSelector = slicer.qMRMLNodeComboBox()
-    self.outputSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
-    self.outputSelector.selectNodeUponCreation = True
-    self.outputSelector.addEnabled = True
-    self.outputSelector.removeEnabled = True
-    self.outputSelector.noneEnabled = True
-    self.outputSelector.showHidden = False
-    self.outputSelector.showChildNodeTypes = False
-    self.outputSelector.setMRMLScene( slicer.mrmlScene )
-    self.outputSelector.setToolTip( "Pick the output to the algorithm." )
-    parametersFormLayout.addRow("Output Volume: ", self.outputSelector)
-
-    #
-    # threshold value
-    #
-    self.imageThresholdSliderWidget = ctk.ctkSliderWidget()
-    self.imageThresholdSliderWidget.singleStep = 0.1
-    self.imageThresholdSliderWidget.minimum = -100
-    self.imageThresholdSliderWidget.maximum = 100
-    self.imageThresholdSliderWidget.value = 0.5
-    self.imageThresholdSliderWidget.setToolTip("Set threshold value for computing the output image. Voxels that have intensities lower than this value will set to zero.")
-    parametersFormLayout.addRow("Image threshold", self.imageThresholdSliderWidget)
-
-    #
-    # check box to trigger taking screen shots for later use in tutorials
-    #
-    self.enableScreenshotsFlagCheckBox = qt.QCheckBox()
-    self.enableScreenshotsFlagCheckBox.checked = 0
-    self.enableScreenshotsFlagCheckBox.setToolTip("If checked, take screen shots for tutorials. Use Save Data to write them to disk.")
-    parametersFormLayout.addRow("Enable Screenshots", self.enableScreenshotsFlagCheckBox)
 
     #
     # Apply Button
     #
-    self.applyButton = qt.QPushButton("Apply")
+    self.applyButton = qt.QPushButton("Apply Evaluation")
     self.applyButton.toolTip = "Run the algorithm."
-    self.applyButton.enabled = False
     parametersFormLayout.addRow(self.applyButton)
 
     # connections
     self.applyButton.connect('clicked(bool)', self.onApplyButton)
-    self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
-    self.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
-
+    
     # Add vertical spacer
     self.layout.addStretch(1)
 
@@ -124,13 +76,11 @@ class SacroNavEvaluationWidget(ScriptedLoadableModuleWidget):
     pass
 
   def onSelect(self):
-    self.applyButton.enabled = self.inputSelector.currentNode() and self.outputSelector.currentNode()
+    pass
 
   def onApplyButton(self):
     logic = SacroNavEvaluationLogic()
-    enableScreenshotsFlag = self.enableScreenshotsFlagCheckBox.checked
-    imageThreshold = self.imageThresholdSliderWidget.value
-    logic.run(self.inputSelector.currentNode(), self.outputSelector.currentNode(), imageThreshold, enableScreenshotsFlag)
+    logic.run()
 
 #
 # SacroNavEvaluationLogic
@@ -146,92 +96,123 @@ class SacroNavEvaluationLogic(ScriptedLoadableModuleLogic):
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
 
-  def hasImageData(self,volumeNode):
-    """This is an example logic method that
-    returns true if the passed in volume
-    node has valid image data
-    """
-    if not volumeNode:
-      logging.debug('hasImageData failed: no volume node')
-      return False
-    if volumeNode.GetImageData() == None:
-      logging.debug('hasImageData failed: no image data in volume node')
-      return False
-    return True
 
-  def isValidInputOutputData(self, inputVolumeNode, outputVolumeNode):
-    """Validates if the output is not the same as input
-    """
-    if not inputVolumeNode:
-      logging.debug('isValidInputOutputData failed: no input volume node defined')
-      return False
-    if not outputVolumeNode:
-      logging.debug('isValidInputOutputData failed: no output volume node defined')
-      return False
-    if inputVolumeNode.GetID()==outputVolumeNode.GetID():
-      logging.debug('isValidInputOutputData failed: input and output volume is the same. Create a new volume for output to avoid this error.')
-      return False
-    return True
-
-  def takeScreenshot(self,name,description,type=-1):
-    # show the message even if not taking a screen shot
-    slicer.util.delayDisplay('Take screenshot: '+description+'.\nResult is available in the Annotations module.', 3000)
-
-    lm = slicer.app.layoutManager()
-    # switch on the type to get the requested window
-    widget = 0
-    if type == slicer.qMRMLScreenShotDialog.FullLayout:
-      # full layout
-      widget = lm.viewport()
-    elif type == slicer.qMRMLScreenShotDialog.ThreeD:
-      # just the 3D window
-      widget = lm.threeDWidget(0).threeDView()
-    elif type == slicer.qMRMLScreenShotDialog.Red:
-      # red slice window
-      widget = lm.sliceWidget("Red")
-    elif type == slicer.qMRMLScreenShotDialog.Yellow:
-      # yellow slice window
-      widget = lm.sliceWidget("Yellow")
-    elif type == slicer.qMRMLScreenShotDialog.Green:
-      # green slice window
-      widget = lm.sliceWidget("Green")
-    else:
-      # default to using the full window
-      widget = slicer.util.mainWindow()
-      # reset the type so that the node is set correctly
-      type = slicer.qMRMLScreenShotDialog.FullLayout
-
-    # grab and convert to vtk image data
-    qpixMap = qt.QPixmap().grabWidget(widget)
-    qimage = qpixMap.toImage()
-    imageData = vtk.vtkImageData()
-    slicer.qMRMLUtils().qImageToVtkImageData(qimage,imageData)
-
-    annotationLogic = slicer.modules.annotations.logic()
-    annotationLogic.CreateSnapShot(name, description, type, 1, imageData)
-
-  def run(self, inputVolume, outputVolume, imageThreshold, enableScreenshots=0):
+  def run(self):
     """
     Run the actual algorithm
     """
+    #Obtengo puntos de referencia
+    f = slicer.util.getNode('reference_sacro_points')
+    sacroToReference = slicer.util.getNode('sacroToReference')
 
-    if not self.isValidInputOutputData(inputVolume, outputVolume):
-      slicer.util.errorDisplay('Input volume is the same as output volume. Choose a different output volume.')
-      return False
+    p1 = [0.0,0.0,0.0]
+    p2 = [0.0,0.0,0.0]
+    p3 = [0.0,0.0,0.0]
 
-    logging.info('Processing started')
+    f.GetNthFiducialPosition(0,p1)
+    f.GetNthFiducialPosition(1,p2)
+    f.GetNthFiducialPosition(2,p3)
 
-    # Compute the thresholded output volume using the Threshold Scalar Volume CLI module
-    cliParams = {'InputVolume': inputVolume.GetID(), 'OutputVolume': outputVolume.GetID(), 'ThresholdValue' : imageThreshold, 'ThresholdType' : 'Above'}
-    cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True)
+    p1 = p1 + [1.0]
+    p2 = p2 + [1.0]
+    p3 = p3 + [1.0]
 
-    # Capture screenshot
-    if enableScreenshots:
-      self.takeScreenshot('SacroNavEvaluationTest-Start','MyScreenshot',-1)
+    # transformamos los puntos a sus coordenadas transformadas
 
-    logging.info('Processing completed')
+    tr= vtk.vtkMatrix4x4()
+    sacroToReference.GetMatrixTransformToWorld(tr) 
 
-    return True
+    p1Transformed = [0.0,0.0,0.0,1.0]
+    p2Transformed = [0.0,0.0,0.0,1.0]
+    p3Transformed = [0.0,0.0,0.0,1.0]
+
+    tr.MultiplyPoint(p1, p1Transformed)
+    tr.MultiplyPoint(p2, p2Transformed)
+    tr.MultiplyPoint(p3, p3Transformed)
+
+    p1Transformed =  [p1Transformed[i] for i in (0,1,2)]
+    p2Transformed =  [p2Transformed[i] for i in (0,1,2)]
+    p3Transformed =  [p3Transformed[i] for i in (0,1,2)]
+
+    m = [np.divide((p1Transformed[0]+p2Transformed[0]+p3Transformed[0]),3),np.divide((p1Transformed[1]+p2Transformed[1]+p3Transformed[1]),3),np.divide((p1Transformed[2]+p2Transformed[2]+p3Transformed[2]),3)]
+    #normal
+    normal = np.cross(np.subtract(p1,p2),np.subtract(p1,p3))
+
+    fids_original = slicer.vtkMRMLMarkupsFiducialNode()
+    fids_original.SetName('Mean Point')
+    fids_original.AddFiducialFromArray(m)
+    fids_original.GetDisplayNode().SetSelectedColor(0,0,1)
+    slicer.mrmlScene.AddNode(fids_original)
+    
+    plano = self.drawPlane(m, normal)
+
+  def drawPlane(self, m, V_norm):
+  
+
+    scene = slicer.mrmlScene
+    #create a plane to cut,here it cuts in the XZ direction (xz normal=(1,0,0);XY =(0,0,1),YZ =(0,1,0)
+    planex=vtk.vtkPlane()
+    planex.SetOrigin(m[0],m[1],m[2])
+    planex.SetNormal(V_norm[0],V_norm[1],V_norm[2])
+    renderer = slicer.app.layoutManager().threeDWidget(0).threeDView().renderWindow().GetRenderers().GetFirstRenderer()
+    viewSize = renderer.ComputeVisiblePropBounds()
+    planexSample = vtk.vtkSampleFunction()
+    planexSample.SetImplicitFunction(planex)
+    planexSample.SetModelBounds(viewSize)
+    planexSample.SetSampleDimensions(50,50,50)
+    planexSample.ComputeNormalsOff()
+    plane1 = vtk.vtkContourFilter()
+    plane1.SetInputConnection(planexSample.GetOutputPort())
+    # Create model Plane A node
+    planeA = slicer.vtkMRMLModelNode()
+    planeA.SetScene(scene)
+    planeA.SetName("Symmetry Plane")
+    planeA.SetAndObservePolyData(plane1.GetOutput())
+    # Create display model Plane A node
+    planeAModelDisplay = slicer.vtkMRMLModelDisplayNode()
+    planeAModelDisplay.SetColor(0,170,127)
+    planeAModelDisplay.BackfaceCullingOff()
+    planeAModelDisplay.SetScene(scene)
+    scene.AddNode(planeAModelDisplay)
+    planeA.SetAndObserveDisplayNodeID(planeAModelDisplay.GetID())
+    #Add to scene
+    planeAModelDisplay.SetInputPolyDataConnection(plane1.GetOutputPort())
+    scene.AddNode(planeA)
+    # adjust center of 3d view to plane
+    layoutManager = slicer.app.layoutManager()
+    threeDWidget = layoutManager.threeDWidget(0)
+    threeDView = threeDWidget.threeDView()
+    threeDView.resetFocalPoint()
+
+    return plane1
+
+  def calculateNeedleVector(self):
+    
+    needle = slicer.util.getNode('NeedleModel')
+    polydataNeedle = needle.GetPolyData()
+    center = polydataNeedle.GetCenter()
+    center = [center[i] for i in (0,1,2)]
+    center = center + [1.0]
+
+    ssr = vtk.vtkMatrix4x4()
+    transform= slicer.util.getNode('needleModelToNeedleTip')
+    transform.GetMatrixTransformToWorld(ssr)
+
+    centerTransformed = [0.0,0.0,0.0,1.0]
+    ssr.MultiplyPoint(center, centerTransformed)
+    centerTransformed = [centerTransformed[i] for i in (0,1,2)]
+
+    m = vtk.vtkMatrix4x4()
+    nttn = slicer.util.getNode('needleModelToNeedleTip')
+    nttn.GetMatrixTransformToWorld(m)
+    tipPoint = [0.0,0.0,0.0]
+    tipPoint[0] = m.GetElement(0, 3)
+    tipPoint[1] = m.GetElement(1, 3)
+    tipPoint[2] = m.GetElement(2, 3)
+
+    needleVector = np.subtract(centerTransformed,tipPoint)
+
+    return needleVector
 
 
 class SacroNavEvaluationTest(ScriptedLoadableModuleTest):
