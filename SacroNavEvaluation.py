@@ -136,13 +136,13 @@ class SacroNavEvaluationLogic(ScriptedLoadableModuleLogic):
 
     m = [np.divide((p1Transformed[0]+p2Transformed[0]+p3Transformed[0]),3),np.divide((p1Transformed[1]+p2Transformed[1]+p3Transformed[1]),3),np.divide((p1Transformed[2]+p2Transformed[2]+p3Transformed[2]),3)]
     #normal
-    normal = np.cross(np.subtract(p1,p2),np.subtract(p1,p3))
+    normal = np.cross(np.subtract(p1Transformed,p2Transformed),np.subtract(p1Transformed,p3Transformed))
 
     fids_original = slicer.vtkMRMLMarkupsFiducialNode()
     fids_original.SetName('Mean Point')
     fids_original.AddFiducialFromArray(m)
-    fids_original.GetDisplayNode().SetSelectedColor(0,0,1)
     slicer.mrmlScene.AddNode(fids_original)
+    fids_original.GetDisplayNode().SetSelectedColor(0,0,1)
     
     plano = self.drawPlane(m, normal)
 
